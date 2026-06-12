@@ -132,18 +132,18 @@ For each tool, describe the specific failure mode you're handling and what the a
 
 ## A Complete Interaction (Step by Step)
 
-Write out what a full user interaction looks like from start to finish — tool call by tool call. Use a specific example query.
+FitFindr takes a user's natural language query describing what clothing they want, parses out filters like size and max price, searches secondhand listings across platforms, and — using their existing wardrobe — generates specific outfit combinations and a shareable social-media caption. The agent loop presents the chat history (system prompt, user query, and all prior assistant/tool messages) and available tool definitions to the LLM. The **LLM decides** which tool to call next by reading back through the conversation to understand what's already happened — it doesn't rely on a separate state object for context. (A result dict returned by the inner loop carries the structured outputs — selected item, outfit suggestion, fit card, error — for the UI to display, but the LLM's reasoning comes from the chat history itself.) For example, if `search_listings` returns nothing, the LLM can skip `suggest_outfit` and `create_fit_card` entirely, setting an error message instead; if the wardrobe is empty, the LLM can still invoke `suggest_outfit` knowing that tool returns general styling advice for that case. Each tool handles its own failure mode gracefully (returning empty lists, fallback text, or error strings) rather than raising exceptions, so the LLM always has enough information to decide what to do next.
 
 **Example user query:** "I'm looking for a vintage graphic tee under $30. I mostly wear baggy jeans and chunky sneakers. What's out there and how would I style it?"
 
-**Step 1:**
-<!-- What does the agent do first? Which tool is called? With what input? -->
+**Step 1 — LLM calls search_listings:** The inner loop starts with the chat history containing the system prompt, the user query, and the available tool definitions. The LLM sees the full context and decides to search listings first. It returns a tool call for `search_listings(description="vintage graphic tee", size=None, max_price=30)`. The tool loads the 40 mock listings, filters to items priced ≤ $30 whose title/description/style_tags overlap with "vintage graphic tee", scores them by keyword relevance, and returns a sorted list. The top match is a Depop listing: "Vintage Band Tee — Nirvana 1994 Tour" at $22, size M, condition good. The tool result is appended to the chat history and the loop continues.
 
-**Step 2:**
-<!-- What happens next? What was returned from step 1? What tool is called now? -->
+**Step 2 — LLM calls suggest_outfit:** The LLM reviews the search results in the chat history and selects the top match as the best candidate. It decides the next logical step is an outfit suggestion, so it calls `suggest_outfit(new_item=top_listing, wardrobe=<user's wardrobe>)`. (The wardrobe was included in the initial user message or system prompt.) The wardrobe contains baggy jeans, chunky sneakers, and other items. The tool formats the wardrobe and the Nirvana tee into a prompt, calls the Groq API, and returns something like: *"Pair the Nirvana tee with your light-wash baggy jeans, the chunky white sneakers, and add a beanie for that effortless 90s grunge look."* The result is appended to the chat history.
 
-**Step 3:**
-<!-- Continue until the full interaction is complete -->
+**Step 3 — LLM calls create_fit_card:** The LLM sees the outfit suggestion in the chat history and decides to generate a shareable caption. It calls `create_fit_card(outfit=<outfit text>, new_item=top_listing)`. The tool prompts the Groq API for a 2–4 sentence Instagram/TikTok-style caption and returns: *"Found this 1994 Nirvana tour tee on Depop for $22 and immediately knew it belonged with my baggy jeans and chunky sneaks. Giving major 90s off-duty energy."* The result is appended to the chat history.
 
-**Final output to user:**
-<!-- What does the user actually see at the end? -->
+**Step 4 — LLM signals done:** With all three tools called and results in the chat history, the LLM returns a plain text response with no tool_calls. The inner loop exits. The returned result dict now contains: `selected_item` (the Nirvana tee), `outfit_suggestion` (the outfit text), and `fit_card` (the caption).
+
+**Failure path (no search results):** If `search_listings` had returned `[]`, the LLM would see the empty list in the chat history, recognize there's nothing to build an outfit from, and set `result["error"]` to a message like "No listings matched your query — try different keywords or a higher price ceiling." It would then return a text response with no further tool calls. The inner loop exits without `suggest_outfit` or `create_fit_card` ever being called.
+
+**Final output to user:** The Gradio UI displays three panels: the listing details in the first panel, the outfit suggestion in the second, and the fit card in the third. If the error path was taken, only the first panel shows the error message.

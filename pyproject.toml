@@ -1,0 +1,13 @@
+[project]
+name = "ai201-project2-fitfindr"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "gradio>=6.9.0",
+    "groq==0.15.0",
+    "pydantic>=2.13.4",
+    "pytest>=8.0.0",
+    "python-dotenv==1.0.1",
+]
