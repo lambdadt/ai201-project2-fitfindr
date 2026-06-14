@@ -126,7 +126,9 @@ def suggest_outfit(new_item: dict, wardrobe: dict) -> str:
         )
     else:
         wardrobe_text = "\n".join(
-            f"- {item['name']} ({item['category']}, {item['color']}, {item['style']})"
+            f"- {item['name']} ({item['category']}, "
+            f"{', '.join(item.get('colors', item.get('color', []))) or 'n/a'}, "
+            f"{', '.join(item.get('style_tags', [item.get('style', '')]))})"
             for item in wardrobe_items
         )
         prompt = (
